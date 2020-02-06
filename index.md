@@ -1,2 +1,4 @@
 ## RISC.BIO 
-![LOGO](https://risc.bio/logo.png)
+![LOGO](https://www.risc.bio/logo.png)
+
+##Rapid Integrative Specialized Cell Biology
