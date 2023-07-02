@@ -1,4 +1,4 @@
 # RISC.BIO 
 ![LOGO](/logo.png)
 
-## Rapid Integrative Specialized Cell Biology
+## Rapidly Integrated Specialized Cell Biology
