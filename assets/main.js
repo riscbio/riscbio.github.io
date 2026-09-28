@@ -34,7 +34,44 @@
       r: (Math.random() * 3 + 1.5) * dpr,
       c: colors[i % colors.length],
       p: Math.random() * Math.PI * 2,
+      ax: Math.random() * Math.PI * 2, ay: Math.random() * Math.PI * 2,
+      sx: (Math.random() - .5) * .012, sy: (Math.random() - .5) * .012 + .004,
     }));
+  }
+
+
+  // 3D cube: 8 vertices, 6 faces, rotated and projected, shaded by face normal
+  const V = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
+  const F = [[0,1,2,3],[5,4,7,6],[4,0,3,7],[1,5,6,2],[4,5,1,0],[3,2,6,7]];
+  const light = [-.4, -.6, -.7];
+  function drawCube(a, s) {
+    const cx = Math.cos(a.ax), sx = Math.sin(a.ax), cy = Math.cos(a.ay), sy = Math.sin(a.ay);
+    const P = V.map(([x, y, z]) => {
+      const y1 = y * cx - z * sx, z1 = y * sx + z * cx;
+      const x2 = x * cy + z1 * sy, z2 = -x * sy + z1 * cy;
+      return [x2, y1, z2];
+    });
+    const faces = [];
+    for (const f of F) {
+      const [p0, p1, p2] = [P[f[0]], P[f[1]], P[f[2]]];
+      const u = [p1[0]-p0[0], p1[1]-p0[1], p1[2]-p0[2]], v = [p2[0]-p0[0], p2[1]-p0[1], p2[2]-p0[2]];
+      const n = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+      if (n[2] >= 0) continue; // back face (camera looks down +z)
+      const len = Math.hypot(n[0], n[1], n[2]) || 1;
+      const lit = Math.max(0, (n[0]*light[0] + n[1]*light[1] + n[2]*light[2]) / len);
+      faces.push({ f, lit, z: (P[f[0]][2] + P[f[2]][2]) / 2 });
+    }
+    faces.sort((m, n) => n.z - m.z);
+    ctx.fillStyle = a.c; ctx.strokeStyle = a.c; ctx.lineJoin = 'round'; ctx.lineWidth = dpr;
+    ctx.shadowColor = a.c; ctx.shadowBlur = 12 * dpr;
+    for (const { f, lit } of faces) {
+      ctx.beginPath();
+      f.forEach((i, k) => { const X = a.x + P[i][0] * s, Y = a.y + P[i][1] * s; k ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); });
+      ctx.closePath();
+      ctx.globalAlpha = .25 + lit * .6; ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = .9; ctx.stroke();
+    }
   }
 
   function frame(t) {
@@ -64,13 +101,9 @@
       }
     }
     for (const a of cells) {
-      const pulse = reduce ? 1 : 1 + Math.sin(t / 900 + a.p) * .25;
-      ctx.globalAlpha = .9; ctx.fillStyle = a.c;
-      ctx.shadowColor = a.c; ctx.shadowBlur = 14 * dpr;
-      ctx.beginPath(); ctx.arc(a.x, a.y, a.r * pulse, 0, Math.PI * 2); ctx.fill();
-      ctx.shadowBlur = 0;
-      ctx.globalAlpha = .25; ctx.strokeStyle = a.c; ctx.lineWidth = dpr;
-      ctx.beginPath(); ctx.arc(a.x, a.y, a.r * pulse * 3.2, 0, Math.PI * 2); ctx.stroke();
+      const pulse = reduce ? 1 : 1 + Math.sin(t / 900 + a.p) * .12;
+      if (!reduce) { a.ax += a.sx; a.ay += a.sy; }
+      drawCube(a, a.r * 2.4 * pulse);
     }
     ctx.globalAlpha = 1;
     if (!reduce) requestAnimationFrame(frame);
