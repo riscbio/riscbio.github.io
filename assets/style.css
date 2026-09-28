@@ -173,3 +173,8 @@ h2 { font-family: var(--display); font-weight: 600; font-size: clamp(2rem, 1.4re
   .wordmark .l, .reveal { opacity: 1; transform: none; }
   html { scroll-behavior: auto; }
 }
+.wordmark .rdot { cursor: pointer; }
+.wordmark .rdot:hover { filter: drop-shadow(0 0 18px #fff); }
+/* Easter egg: fade page content so the channel is visible */
+main, .footer { transition: opacity 1.6s var(--ease); }
+body.channel-on main, body.channel-on .footer { opacity: .15; }

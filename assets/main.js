@@ -75,12 +75,94 @@
     }
   }
 
+  // ---- Easter egg: microfluidic channel -------------------------------
+  // Idle 5 min (or click the "." in RISC.BIO) -> cubes line up into two
+  // walls with a gap in the middle, and cell-like particles flow through.
+  const IDLE_MS = 5 * 60 * 1000, CLICK_MS = 45 * 1000;
+  let lastRelease = 0;
+  let mode = 'free';           // 'free' | 'idle' | 'click'
+  let m = 0;                   // 0 = free field, 1 = channel fully formed
+  let modeStart = 0, lastActive = performance.now();
+  let flow = [];               // flowing cell particles
+
+  function channelGeom() {
+    const cy = h * 0.5;
+    const gap = Math.max(90, Math.min(innerHeight * 0.18, 170)) * dpr;
+    return { cy, gap };
+  }
+  function assignSlots() {
+    const sorted = [...cells].sort((p, q) => p.y - q.y);
+    const half = Math.ceil(sorted.length / 2);
+    [sorted.slice(0, half), sorted.slice(half)].forEach((row, ri) => {
+      row.sort((p, q) => p.x - q.x).forEach((c, k) => { c.row = ri; c.slot = k; c.rowLen = row.length; });
+    });
+  }
+  function enterChannel(kind) {
+    if (reduce || mode !== 'free') return;
+    mode = kind; modeStart = performance.now(); assignSlots();
+    document.body.classList.add('channel-on');
+  }
+  function releaseChannel() {
+    if (mode === 'free') return;
+    mode = 'free'; lastRelease = performance.now();
+    document.body.classList.remove('channel-on');
+    for (const c of cells) { c.vx = (Math.random() - .5) * 2 * dpr; c.vy = (Math.random() - .5) * 2 * dpr; }
+  }
+  function spawnCell(g) {
+    const r = (Math.random() * 3 + 3.5) * dpr;
+    const lane = (g.gap / 2 - 22 * dpr - r);
+    flow.push({
+      x: -20 * dpr, y: g.cy + (Math.random() * 2 - 1) * lane, r,
+      v: (Math.random() * 1.4 + 1.4) * dpr, ph: Math.random() * Math.PI * 2,
+      c: colors[(Math.random() * colors.length) | 0], rot: Math.random() * Math.PI,
+    });
+  }
+  function drawFlow(t, g) {
+    const alive = [];
+    for (const f of flow) {
+      f.x += f.v;
+      f.y += Math.sin(t / 380 + f.ph) * .25 * dpr;
+      const lim = g.gap / 2 - 20 * dpr - f.r;
+      f.y = Math.max(g.cy - lim, Math.min(g.cy + lim, f.y));
+      f.rot += .01;
+      if (f.x > w + 30 * dpr) continue;
+      alive.push(f);
+      const a = Math.min(1, m * 1.2);
+      ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot);
+      // membrane (slightly squashed, stretched by speed) + nucleus
+      ctx.shadowColor = f.c; ctx.shadowBlur = 10 * dpr;
+      ctx.globalAlpha = .18 * a; ctx.fillStyle = f.c;
+      ctx.beginPath(); ctx.ellipse(0, 0, f.r * 1.25, f.r * .95, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = .8 * a; ctx.strokeStyle = f.c; ctx.lineWidth = 1.2 * dpr; ctx.stroke();
+      ctx.globalAlpha = .9 * a;
+      ctx.beginPath(); ctx.arc(f.r * .25, -f.r * .1, f.r * .35, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    flow = alive;
+  }
+  const lerpAngle = (a, b, k) => {
+    let d = ((b - a) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI;
+    return a + d * k;
+  };
+
   function frame(t) {
+    const now = performance.now();
+    if (mode === 'free' && now - lastActive > IDLE_MS) enterChannel('idle');
+    if (mode === 'click' && now - modeStart > CLICK_MS) releaseChannel();
+    m += ((mode === 'free' ? 0 : 1) - m) * .03;
+    const g = channelGeom();
     ctx.clearRect(0, 0, w, h);
     const link = 140 * dpr;
     for (let i = 0; i < cells.length; i++) {
       const a = cells[i];
-      if (!reduce) {
+      if (!reduce && mode !== 'free') {
+        const spacing = w / a.rowLen;
+        const tx = (a.slot + .5) * spacing;
+        const ty = g.cy + (a.row ? 1 : -1) * g.gap / 2;
+        a.x += (tx - a.x) * .045; a.y += (ty - a.y) * .045;
+        a.ax = lerpAngle(a.ax, -.55, .04); a.ay = lerpAngle(a.ay, .75, .04); a.hr = lerpAngle(a.hr, 0, .04);
+      } else if (!reduce) {
         // gentle repel from cursor
         const mx = a.x - mouse.x, my = a.y - mouse.y, md = Math.hypot(mx, my);
         if (md < 160 * dpr && md > 0) { a.vx += (mx / md) * .05; a.vy += (my / md) * .05; }
@@ -108,22 +190,38 @@
     for (const a of cells) {
       const pulse = reduce ? 1 : 1 + Math.sin(t / 900 + a.p) * .12;
       const halo = reduce ? 1 : 1 + Math.sin(t / 900 + a.p) * .25;
-      if (!reduce) { a.ax += a.sx; a.ay += a.sy; a.hr += a.hs; }
-      drawCube(a, a.r * 2.4 * pulse);
+      if (!reduce && mode === 'free') { a.ax += a.sx; a.ay += a.sy; a.hr += a.hs; }
+      const rr = a.r + (3.2 * dpr - a.r) * m;
+      drawCube(a, rr * 2.4 * pulse);
       // square halo, slowly spinning and breathing
-      const hsz = a.r * 6 * halo;
+      const hsz = rr * (6 - 2.6 * m) * halo;
       ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.hr);
       ctx.globalAlpha = .28; ctx.strokeStyle = a.c; ctx.lineWidth = dpr;
       ctx.strokeRect(-hsz, -hsz, hsz * 2, hsz * 2);
       ctx.restore();
     }
+    if (mode !== 'free' && m > .85 && flow.length < 60 && Math.random() < .12) spawnCell(g);
+    if (flow.length) drawFlow(t, g);
     ctx.globalAlpha = 1;
     if (!reduce) requestAnimationFrame(frame);
   }
 
-  addEventListener('resize', resize);
+  addEventListener('resize', () => { resize(); if (mode !== 'free') assignSlots(); });
+  // idle channel: any activity releases it. clicked channel: a click, key, or scroll releases it.
+  const activity = (e) => {
+    lastActive = performance.now();
+    if (mode === 'idle' || (mode === 'click' && e.type !== 'pointermove')) releaseChannel();
+  };
+  ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart'].forEach((ev) =>
+    addEventListener(ev, activity, { passive: true }));
+  const dot = document.querySelector('.wordmark .rdot');
+  if (dot) dot.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (mode === 'free' && performance.now() - lastRelease > 400) enterChannel('click');
+  });
   addEventListener('pointermove', (e) => { mouse.x = e.clientX * dpr; mouse.y = e.clientY * dpr; });
   addEventListener('pointerleave', () => { mouse.x = mouse.y = -9999; });
   resize();
+  if (location.hash === '#channel') setTimeout(() => enterChannel('click'), 800);
   requestAnimationFrame(frame);
 })();
