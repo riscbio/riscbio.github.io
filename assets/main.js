@@ -30,10 +30,11 @@
     const count = Math.round(Math.min(90, (innerWidth * innerHeight) / 16000));
     cells = Array.from({ length: count }, (_, i) => ({
       x: Math.random() * w, y: Math.random() * h,
-      vx: (Math.random() - .5) * .25 * dpr, vy: (Math.random() - .5) * .25 * dpr,
+      vx: (Math.random() - .5) * .9 * dpr, vy: (Math.random() - .5) * .9 * dpr,
       r: (Math.random() * 3 + 1.5) * dpr,
       c: colors[i % colors.length],
       p: Math.random() * Math.PI * 2,
+      hr: Math.random() * Math.PI, hs: (Math.random() - .5) * .02,
       ax: Math.random() * Math.PI * 2, ay: Math.random() * Math.PI * 2,
       sx: (Math.random() - .5) * .012, sy: (Math.random() - .5) * .012 + .004,
     }));
@@ -83,8 +84,12 @@
         // gentle repel from cursor
         const mx = a.x - mouse.x, my = a.y - mouse.y, md = Math.hypot(mx, my);
         if (md < 160 * dpr && md > 0) { a.vx += (mx / md) * .05; a.vy += (my / md) * .05; }
-        a.vx *= .99; a.vy *= .99;
-        a.vx += (Math.random() - .5) * .01; a.vy += (Math.random() - .5) * .01;
+        a.vx *= .995; a.vy *= .995;
+        a.vx += (Math.random() - .5) * .04 * dpr; a.vy += (Math.random() - .5) * .04 * dpr;
+        // keep everything drifting: gentle speed floor and cap
+        const sp = Math.hypot(a.vx, a.vy), min = .25 * dpr, max = 1.2 * dpr;
+        if (sp < min) { const k = min / (sp || 1); a.vx = (a.vx || .1) * k; a.vy = (a.vy || .1) * k; }
+        else if (sp > max) { a.vx *= max / sp; a.vy *= max / sp; }
         a.x += a.vx; a.y += a.vy;
         if (a.x < 0 || a.x > w) a.vx *= -1;
         if (a.y < 0 || a.y > h) a.vy *= -1;
@@ -102,8 +107,15 @@
     }
     for (const a of cells) {
       const pulse = reduce ? 1 : 1 + Math.sin(t / 900 + a.p) * .12;
-      if (!reduce) { a.ax += a.sx; a.ay += a.sy; }
+      const halo = reduce ? 1 : 1 + Math.sin(t / 900 + a.p) * .25;
+      if (!reduce) { a.ax += a.sx; a.ay += a.sy; a.hr += a.hs; }
       drawCube(a, a.r * 2.4 * pulse);
+      // square halo, slowly spinning and breathing
+      const hsz = a.r * 6 * halo;
+      ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(a.hr);
+      ctx.globalAlpha = .28; ctx.strokeStyle = a.c; ctx.lineWidth = dpr;
+      ctx.strokeRect(-hsz, -hsz, hsz * 2, hsz * 2);
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
     if (!reduce) requestAnimationFrame(frame);
