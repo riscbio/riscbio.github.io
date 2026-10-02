@@ -1,4 +1,6 @@
 (() => {
+  const yr = document.getElementById('yr');
+  if (yr) yr.textContent = new Date().getFullYear();
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // Scroll reveal
